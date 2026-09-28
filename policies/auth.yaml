@@ -1,0 +1,6 @@
+policy:
+  name: auth
+  type: authentication
+  scheme: bearer
+  header: Authorization
+  required: true

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://pragma.com/pagos/request"
+           targetNamespace="http://pragma.com/pagos/request"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+    <xs:element name="PagoRequest" type="tns:PagoRequestType"/>
+
+    <xs:complexType name="PagoRequestType">
+        <xs:sequence>
+            <xs:element name="idempotencyKey" type="xs:string" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Clave de idempotencia para evitar pagos duplicados. Formato UUID recomendado.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="monto" type="tns:MontoType" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="clienteId" type="xs:string" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Identificador único del cliente que realiza el pago.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ordenId" type="xs:string" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Identificador de la orden asociada al pago. Opcional para pagos directos.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="descripcion" type="xs:string" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Descripción libre del propósito del pago.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="metadata" type="tns:MetadataType" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Metadatos adicionales para el pago.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MontoType">
+        <xs:sequence>
+            <xs:element name="valor" type="xs:decimal" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Valor numérico del pago con hasta 2 decimales.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="moneda" type="tns:MonedaType" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="MonedaType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="COP">
+                <xs:annotation>
+                    <xs:documentation>Peso Colombiano</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="USD">
+                <xs:annotation>
+                    <xs:documentation>Dólar Estadounidense</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="EUR">
+                <xs:annotation>
+                    <xs:documentation>Euro</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="MetadataType">
+        <xs:sequence>
+            <xs:element name="entry" type="tns:MetadataEntryType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MetadataEntryType">
+        <xs:sequence>
+            <xs:element name="key" type="xs:string" minOccurs="1" maxOccurs="1"/>
+            <xs:element name="value" type="xs:string" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:annotation>
+        <xs:documentation>Esquema XSD para validación de requests de pago en la plataforma Pragma.</xs:documentation>
+    </xs:annotation>
+</xs:schema>

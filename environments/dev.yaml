@@ -1,0 +1,9 @@
+environment: dev
+api:
+  baseUrl: http://localhost:8080
+kafka:
+  bootstrapServers: localhost:9092
+services:
+  motorPagos: http://localhost:8081/api/pagos
+  autenticacion: http://localhost:8082/api/auth
+  notificacion: http://localhost:8083/api/notifications

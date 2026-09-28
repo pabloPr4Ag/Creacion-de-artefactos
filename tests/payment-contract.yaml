@@ -1,0 +1,15 @@
+name: payment-api-contract
+baseUrl: http://localhost:8080
+requests:
+  - name: create-payment
+    method: POST
+    path: /api/pagos
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer <token>
+    body:
+      idempotencyKey: pay_test_001
+      monto: 100.00
+      moneda: COP
+      clienteId: cli_001
+      ordenId: ord_001

@@ -1,0 +1,5 @@
+policy:
+  name: rate-limit
+  type: rate-limit
+  requestsPerMinute: 60
+  burst: 20

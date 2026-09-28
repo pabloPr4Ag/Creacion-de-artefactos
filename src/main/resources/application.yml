@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: pagos
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: pagos-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+camel:
+  springboot:
+    main-run-controller: true
+    name: pagos-camel
+  component:
+    kafka:
+      brokers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      groupId: pagos-group
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 5s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      motorPagos:
+        baseConfig: default
+        waitDurationInOpenState: 10s
+      autenticacion:
+        baseConfig: default
+      notificacion:
+        baseConfig: default
+  retry:
+    configs:
+      default:
+        maxRetryAttempts: 3
+        waitDuration: 1s
+        retryExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      motorPagos:
+        baseConfig: default
+      autenticacion:
+        baseConfig: default
+      notificacion:
+        baseConfig: default
+
+services:
+  endpoints:
+    motorPagos: ${MOTOR_PAGOS_ENDPOINT:http://localhost:8081/api/pagos}
+    autenticacion: ${AUTH_ENDPOINT:http://localhost:8082/api/auth}
+    notificacion: ${NOTIFICACION_ENDPOINT:http://localhost:8083/api/notifications}
+
+logging:
+  level:
+    org.apache.camel: INFO
+    com.pragma.pagos: DEBUG
+    org.springframework: INFO
+    io.github.resilience4j: DEBUG

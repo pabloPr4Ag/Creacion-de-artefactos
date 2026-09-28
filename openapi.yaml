@@ -1,0 +1,665 @@
+openapi: 3.1.0
+info:
+  title: API de Gestión de Pagos
+  description: |
+    Plataforma de gestión de pagos en línea que permite crear, consultar y gestionar
+    transacciones de pago con integración a motor de pagos externo, sistema de
+    autenticación y servicio de notificaciones.
+  version: 1.0.0
+  contact:
+    name: Equipo de Desarrollo
+    email: desarrollo@pragma.com
+  license:
+    name: Proprietario
+    url: https://pragma.com/licencia
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor de desarrollo local
+  - url: ${API_BASE_URL}
+    description: Servidor de producción
+
+tags:
+  - name: Pagos
+    description: Operaciones sobre transacciones de pago
+  - name: Salud
+    description: Endpoints de salud del sistema
+
+paths:
+  /api/pagos:
+    post:
+      summary: Crear una nueva transacción de pago
+      description: |
+        Crea un nuevo pago en el sistema. Utiliza una clave de idempotencia para
+        garantizar que pagos duplicados no sean procesados múltiples veces.
+        El flujo incluye validación, llamada al motor de pagos, y notificación al cliente.
+      operationId: crearPago
+      tags:
+        - Pagos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagoRequest'
+            examples:
+              pagoExitoso:
+                summary: Ejemplo de pago exitoso
+                value:
+                  idempotencyKey: "pay_abc123def456"
+                  monto: 150000.00
+                  moneda: "COP"
+                  descripcion: "Compra en tienda virtual - Orden #12345"
+                  clienteId: "cli_987654321"
+                  ordenId: "ord_12345"
+      responses:
+        '201':
+          description: Pago creado exitosamente
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+              description: Identificador de correlación para trazabilidad
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Solicitud inválida - datos de entrada incorrectos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                montoInvalido:
+                  summary: Monto negativo
+                  value:
+                    codigo: "MONTO_INVALIDO"
+                    mensaje: "El monto debe ser mayor a cero"
+                    campo: "monto"
+                    valorRechazado: -100
+                monedaInvalida:
+                  summary: Moneda no soportada
+                  value:
+                    codigo: "MONEDA_INVALIDA"
+                    mensaje: "La moneda debe ser una de las soportadas"
+                    campo: "moneda"
+                    valorRechazado: "XYZ"
+        '409':
+          description: Conflicto - clave de idempotencia duplicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                claveDuplicada:
+                  summary: Clave de idempotencia existente
+                  value:
+                    codigo: "IDEMPOTENCY_KEY_DUPLICADA"
+                    mensaje: "Ya existe un pago con esta clave de idempotencia"
+                    campo: "idempotencyKey"
+                    valorRechazado: "pay_abc123def456"
+        '422':
+          description: Entidad no procesable - validación de negocio fallida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validacionNegocio:
+                  summary: Error de validación de negocio
+                  value:
+                    codigo: "VALIDACION_NEGOCIO"
+                    mensaje: "El monto excede el límite permitido para el cliente"
+                    campo: "monto"
+                    valorRechazado: 10000000
+    get:
+      summary: Listar transacciones de pago
+      description: |
+        Retorna una lista paginada de pagos. Soporta filtros por estado, cliente
+        y rango de fechas.
+      operationId: listarPagos
+      tags:
+        - Pagos
+      parameters:
+        - name: page
+          in: query
+          description: Número de página (0-indexed)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: Tamaño de página
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: estado
+          in: query
+          description: Filtrar por estado del pago
+          schema:
+            $ref: '#/components/schemas/EstadoPago'
+        - name: clienteId
+          in: query
+          description: Filtrar por identificador de cliente
+          schema:
+            type: string
+            pattern: '^cli_[a-zA-Z0-9]+$'
+        - name: fechaDesde
+          in: query
+          description: Fecha inicial del rango (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: fechaHasta
+          in: query
+          description: Fecha final del rango (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de pagos recuperada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoPaginadoResponse'
+        '400':
+          description: Parámetros de consulta inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pagos/{id}:
+    get:
+      summary: Obtener detalle de un pago
+      description: Retorna la información completa de un pago por su identificador único.
+      operationId: obtenerPago
+      tags:
+        - Pagos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único del pago (UUID)
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Pago encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '404':
+          description: Pago no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noEncontrado:
+                  summary: Pago inexistente
+                  value:
+                    codigo: "PAGO_NO_ENCONTRADO"
+                    mensaje: "No existe un pago con el identificador proporcionado"
+                    campo: "id"
+                    valorRechazado: "550e8400-e29b-41d4-a716-446655440000"
+
+  /api/pagos/{id}/estado:
+    put:
+      summary: Actualizar estado de un pago
+      description: |
+        Actualiza el estado de un pago. Utilizado principalmente por webhooks
+        del motor de pagos externo para notificar cambios de estado.
+      operationId: actualizarEstadoPago
+      tags:
+        - Pagos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único del pago
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizacionEstadoRequest'
+      responses:
+        '200':
+          description: Estado actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Transición de estado inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                transicionInvalida:
+                  summary: Transición no permitida
+                  value:
+                    codigo: "TRANSICION_ESTADO_INVALIDA"
+                    mensaje: "No se puede transiciónar de PENDIENTE a CANCELADO directamente"
+                    campo: "estado"
+                    valorRechazado: "CANCELADO"
+        '404':
+          description: Pago no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pagos/{id}/reintento:
+    post:
+      summary: Reintentar un pago fallido
+      description: |
+        Reintenta un pago que se encuentra en estado FALLIDO. Genera una nueva
+        clave de idempotencia y reinicia el flujo completo de procesamiento.
+      operationId: reintentarPago
+      tags:
+        - Pagos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único del pago a reintentar
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reintento iniciado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: El pago no puede ser reintentado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                estadoInvalido:
+                  summary: Estado no permite reintento
+                  value:
+                    codigo: "REINTENTO_NO_PERMITIDO"
+                    mensaje: "Solo se pueden reintentar pagos en estado FALLIDO"
+                    campo: "estado"
+                    valorRechazado: "COMPLETADO"
+        '404':
+          description: Pago no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/pagos/{id}/reembolso:
+    post:
+      summary: Solicitar reembolso de un pago
+      description: |
+        Solicita el reembolso de un pago previamente completado. El reembolso
+        es procesado de forma asíncrona por el motor de pagos.
+      operationId: solicitarReembolso
+      tags:
+        - Pagos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identificador único del pago a reembolsar
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReembolsoRequest'
+      responses:
+        '202':
+          description: Solicitud de reembolso aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Reembolso no permitido para este pago
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pago no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /actuator/health:
+    get:
+      summary: Verificar salud del sistema
+      description: |
+        Endpoint de salud que indica si la aplicación está operativa y
+        todos sus componentes integrados están disponibles.
+      operationId: healthCheck
+      tags:
+        - Salud
+      responses:
+        '200':
+          description: Sistema saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Sistema no saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /actuator/info:
+    get:
+      summary: Información de la aplicación
+      description: Retorna metadata de la aplicación como versión, nombre y descripción.
+      operationId: appInfo
+      tags:
+        - Salud
+      responses:
+        '200':
+          description: Información recuperada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      version:
+                        type: string
+                      description:
+                        type: string
+
+components:
+  schemas:
+    PagoRequest:
+      type: object
+      required:
+        - idempotencyKey
+        - monto
+        - moneda
+        - clienteId
+      properties:
+        idempotencyKey:
+          type: string
+          description: |
+            Clave única que identifica de forma única esta operación de pago.
+            Debe ser un valor generado por el cliente que garantice la idempotencia.
+          pattern: '^[a-zA-Z0-9_\-]{10,64}$'
+          example: "pay_abc123def456"
+        monto:
+          type: number
+          description: Monto de la transacción en la moneda especificada
+          format: decimal
+          minimum: 0.01
+          maximum: 999999999.99
+          example: 150000.00
+        moneda:
+          type: string
+          description: Código ISO 4217 de la moneda
+          enum:
+            - COP
+            - USD
+            - EUR
+            - MXN
+            - PEN
+          example: "COP"
+        descripcion:
+          type: string
+          description: Descripción de la transacción
+          maxLength: 500
+          example: "Compra en tienda virtual - Orden #12345"
+        clienteId:
+          type: string
+          description: Identificador único del cliente en el sistema
+          pattern: '^cli_[a-zA-Z0-9]+$'
+          example: "cli_987654321"
+        ordenId:
+          type: string
+          description: Identificador de la orden asociada
+          pattern: '^ord_[a-zA-Z0-9]+$'
+          example: "ord_12345"
+        metadata:
+          type: object
+          description: Datos adicionales específicos del comercio
+          additionalProperties:
+            type: string
+          example:
+            canal: "web"
+            idempotencyKey: "pay_abc123def456"
+
+    PagoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único del pago
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        idempotencyKey:
+          type: string
+          description: Clave de idempotencia original
+        monto:
+          type: number
+          format: decimal
+        moneda:
+          type: string
+          enum:
+            - COP
+            - USD
+            - EUR
+            - MXN
+            - PEN
+        estado:
+          $ref: '#/components/schemas/EstadoPago'
+        correlationId:
+          type: string
+          description: ID de correlación para trazabilidad distribuida
+          example: "corr_abc123def456ghi789"
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Fecha de creación del pago
+          example: "2025-01-15T10:30:00Z"
+        fechaActualizacion:
+          type: string
+          format: date-time
+          description: Fecha de última actualización
+          example: "2025-01-15T10:35:00Z"
+        descripcion:
+          type: string
+        clienteId:
+          type: string
+        ordenId:
+          type: string
+
+    EstadoPago:
+      type: string
+      description: Estados posibles de un pago en el sistema
+      enum:
+        - PENDIENTE
+        - PROCESANDO
+        - COMPLETADO
+        - FALLIDO
+        - CANCELADO
+        - REEMBOLSADO
+      example: "PENDIENTE"
+
+    ActualizacionEstadoRequest:
+      type: object
+      required:
+        - estado
+        - motivo
+      properties:
+        estado:
+          $ref: '#/components/schemas/EstadoPago'
+        motivo:
+          type: string
+          description: Razón o descripción del cambio de estado
+          maxLength: 500
+          example: "Pago aprobado por el motor de pagos"
+        fechaProcesamiento:
+          type: string
+          format: date-time
+          description: Fecha en que el motor de pagos procesó la transacción
+
+    ReembolsoRequest:
+      type: object
+      required:
+        - motivo
+        - monto
+      properties:
+        motivo:
+          type: string
+          description: Razón del reembolso
+          maxLength: 500
+          example: "Cliente solicitó cancelación dentro de las 24 horas"
+        monto:
+          type: number
+          format: decimal
+          description: |
+            Monto a reembolsar. Si no se especifica, se reembolsa el monto total.
+            Permite reembolsos parciales.
+          minimum: 0.01
+          example: 75000.00
+
+    ErrorResponse:
+      type: object
+      description: Estructura estándar de respuesta de error
+      properties:
+        codigo:
+          type: string
+          description: Código de error único para categorización
+          example: "MONTO_INVALIDO"
+        mensaje:
+          type: string
+          description: Descripción legible del error
+          example: "El monto debe ser mayor a cero"
+        campo:
+          type: string
+          description: Campo que originó el error
+          example: "monto"
+        valorRechazado:
+          description: Valor que fue rechazado por validación
+          example: -100
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp del error
+          example: "2025-01-15T10:30:00Z"
+        correlationId:
+          type: string
+          description: ID de correlación para trazabilidad
+
+    PagoPaginadoResponse:
+      type: object
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/PagoResponse'
+        pagina:
+          type: integer
+          description: Número de página actual
+          example: 0
+        tamanhoPagina:
+          type: integer
+          description: Elementos por página
+          example: 20
+        totalElementos:
+          type: integer
+          description: Total de elementos disponibles
+          example: 150
+        totalPaginas:
+          type: integer
+          description: Total de páginas
+          example: 8
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - UP
+            - DOWN
+            - UNKNOWN
+          description: Estado general del sistema
+        components:
+          type: object
+          description: Estado de los componentes individuales
+          properties:
+            db:
+              $ref: '#/components/schemas/ComponentHealth'
+            kafka:
+              $ref: '#/components/schemas/ComponentHealth'
+            motorPagos:
+              $ref: '#/components/schemas/ComponentHealth'
+            autenticacion:
+              $ref: '#/components/schemas/ComponentHealth'
+            notificacion:
+              $ref: '#/components/schemas/ComponentHealth'
+
+    ComponentHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - UP
+            - DOWN
+          example: "UP"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token JWT utilizado para autenticación. Debe ser obtenido del
+        sistema de autenticación antes de realizar llamadas a la API.
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Clave de API para autenticación machine-to-machine. Usar en
+        lugar de JWT para integraciones entre sistemas.
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+
+externalDocs:
+  description: Documentación adicional del dominio de pagos
+  url: https://docs.pragma.com/pagos

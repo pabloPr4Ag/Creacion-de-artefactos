@@ -1,0 +1,9 @@
+environment: prod
+api:
+  baseUrl: ${API_BASE_URL}
+kafka:
+  bootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS}
+services:
+  motorPagos: ${MOTOR_PAGOS_ENDPOINT}
+  autenticacion: ${AUTH_ENDPOINT}
+  notificacion: ${NOTIFICACION_ENDPOINT}

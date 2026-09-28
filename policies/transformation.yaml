@@ -1,0 +1,9 @@
+policy:
+  name: transformation
+  type: transformation
+  request:
+    headers:
+      X-Correlation-ID: generate-if-absent
+  response:
+    headers:
+      X-Correlation-ID: propagate
